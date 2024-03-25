@@ -33,7 +33,7 @@ from colossalai.shardformer.shard import ShardConfig
 from ..layer import ColoAttention, cross_entropy_1d
 
 try:
-    from transformers.models.llama.modeling_llama import _prepare_4d_causal_attention_mask
+    from transformers.models.llama.modeling_llama import _prepare_4d_causal_attention_mask, _prepare_4d_causal_attention_mask_for_sdpa
 
     LATEST_VERSION = True
 except ImportError:
@@ -76,13 +76,13 @@ class LlamaPipelineForwards:
         # retrieve input_ids and inputs_embeds
         if stage_manager.is_first_stage():
             if input_ids is not None and inputs_embeds is not None:
-                raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
+                raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
             elif input_ids is not None:
-                batch_size, seq_length = input_ids.shape
+                batch_size, seq_length = input_ids.shape[:2]
             elif inputs_embeds is not None:
-                batch_size, seq_length, _ = inputs_embeds.shape
+                batch_size, seq_length, _ = inputs_embeds.shape[:2]
             else:
-                raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
+                raise ValueError("You have to specify either input_ids or inputs_embeds")
             device = input_ids.device if input_ids is not None else inputs_embeds.device
             if inputs_embeds is None:
                 inputs_embeds = self.embed_tokens(input_ids)
@@ -114,9 +114,7 @@ class LlamaPipelineForwards:
             position_ids = torch.arange(
                 past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
             )
-            position_ids = position_ids.unsqueeze(0).view(-1, seq_length)
-        else:
-            position_ids = position_ids.view(-1, seq_length).long()
+            position_ids = position_ids.unsqueeze(0)
 
         # embed positions, for the first stage, hidden_states is the input embeddings,
         # for the other stages, hidden_states is the output of the previous stage
@@ -127,17 +125,25 @@ class LlamaPipelineForwards:
                 mask_shape, hidden_states.dtype, hidden_states.device, q_padding_mask=attention_mask, is_causal=True
             )
         else:
-            if attention_mask is None:
-                attention_mask = torch.ones(
-                    (batch_size, seq_length_with_past), dtype=torch.bool, device=hidden_states.device
-                )
-            if LATEST_VERSION:
-                attention_mask = _prepare_4d_causal_attention_mask(
-                    attention_mask, (batch_size, seq_length), hidden_states, past_key_values_length
+            if self._use_flash_attention_2:
+                # 2d mask is passed through the layers
+                attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+            elif self._use_sdpa and not output_attentions:
+                # output_attentions=True can not be supported when using SDPA, and we fall back on
+                # the manual implementation that requires a 4D causal mask in all cases.
+                attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
+                    attention_mask,
+                    (batch_size, seq_length),
+                    inputs_embeds,
+                    past_key_values_length,
                 )
             else:
-                attention_mask = self._prepare_decoder_attention_mask(
-                    attention_mask, (batch_size, seq_length), hidden_states, past_key_values_length
+                # 4d mask is passed through the layers
+                attention_mask = _prepare_4d_causal_attention_mask(
+                    attention_mask,
+                    (batch_size, seq_length),
+                    hidden_states,
+                    past_key_values_length,
                 )
 
         if self.gradient_checkpointing and self.training:
@@ -150,7 +156,7 @@ class LlamaPipelineForwards:
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        next_decoder_cache = () if use_cache else None
+        next_decoder_cache = None
 
         start_idx, end_idx = stage_index[0], stage_index[1]
         num_ckpt_layers = 0
@@ -169,30 +175,25 @@ class LlamaPipelineForwards:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            past_key_value = past_key_values[idx] if past_key_values is not None else None
+            #past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if idx - start_idx < num_ckpt_layers:
 
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        # None for past_key_value
-                        return module(*inputs, output_attentions, None)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(decoder_layer),
+                layer_outputs = self._gradient_checkpointing_func(
+                    decoder_layer.__call__,
                     hidden_states,
                     attention_mask,
                     position_ids,
-                    None,
+                    past_key_values,
+                    output_attentions,
+                    use_cache,
                 )
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,
                     position_ids=position_ids,
-                    past_key_value=past_key_value,
+                    past_key_value=past_key_values,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                 )
@@ -200,7 +201,7 @@ class LlamaPipelineForwards:
             hidden_states = layer_outputs[0]
 
             if use_cache:
-                next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)
+                next_decoder_cache = layer_outputs[2 if output_attentions else 1]
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
