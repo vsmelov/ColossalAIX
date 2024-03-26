@@ -32,12 +32,7 @@ from colossalai.shardformer.shard import ShardConfig
 
 from ..layer import ColoAttention, cross_entropy_1d
 
-try:
-    from transformers.models.llama.modeling_llama import _prepare_4d_causal_attention_mask, _prepare_4d_causal_attention_mask_for_sdpa
-
-    LATEST_VERSION = True
-except ImportError:
-    LATEST_VERSION = False
+from transformers.models.llama.modeling_llama import _prepare_4d_causal_attention_mask, _prepare_4d_causal_attention_mask_for_sdpa
 
 
 class LlamaPipelineForwards:
