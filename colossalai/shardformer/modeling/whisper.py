@@ -5,6 +5,10 @@ from typing import List, Optional, Tuple, Union
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
+from transformers.modeling_attn_mask_utils import (
+    _prepare_4d_causal_attention_mask,
+    _prepare_4d_causal_attention_mask_for_sdpa,
+)
 from transformers.modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -701,6 +705,20 @@ class WhisperPipelineForwards:
 
             if inputs_embeds is None:
                 inputs_embeds = self.embed_tokens(input_ids)
+
+            if self._use_flash_attention_2:
+                # 2d mask is passed through the layers
+                attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+            elif self._use_sdpa and head_mask is None and not output_attentions:
+                # output_attentions=True & head_mask can not be supported when using SDPA.
+                attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
+                    attention_mask, input_shape, inputs_embeds, past_key_values_length
+                )
+            else:
+                # 4d mask is passed through the layers
+                attention_mask = _prepare_4d_causal_attention_mask(
+                    attention_mask, input_shape, inputs_embeds, past_key_values_length
+                )
 
             # embed positions
             if input_ids is not None:
