@@ -1,3 +1,9 @@
+"""
+curl -X POST "http://51.107.21.198:40670/inference/" \
+     -H "Content-Type: application/json" \
+     -d '{"text": "Hi! How are you?", "max_new_tokens": 100}'
+"""
+
 import time
 import torch
 from fastapi import FastAPI, HTTPException
@@ -42,9 +48,10 @@ def do_inference(request: TextRequest):
             max_new_tokens=request.max_new_tokens
         )
         response = tokenizer.decode(output)
-        logging.info(f'Inference took {time.time() - start_time:.2f} seconds')
+        duration = time.time() - start_time
+        logging.info(f'Inference took {duration:.2f} seconds')
         logging.info(f"Response: {response}")
-        return {"response": response}
+        return {"response": response, 'duration': duration}
     except Exception as e:
         logging.exception(f'Error occurred: {e}')
         raise HTTPException(status_code=500, detail=str(e))
@@ -87,6 +94,3 @@ if __name__ == "__main__":
     if dist.get_rank() == 0:
         import uvicorn
         uvicorn.run(app, host="0.0.0.0", port=8000)
-    else:
-        # Other processes do computational work
-        dist.barrier()  # This could be used to synchronize processes if needed
