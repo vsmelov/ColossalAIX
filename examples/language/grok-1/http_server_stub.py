@@ -1,22 +1,33 @@
 """
-Run with:
-    python http_server_stub.py
+pip install fastapi uvicorn
 """
 
-from http.server import SimpleHTTPRequestHandler, HTTPServer
+from fastapi import FastAPI
+from pydantic import BaseModel
+import time
 
-host = '0.0.0.0'
-port = 8000
+app = FastAPI()
 
-class MyHandler(SimpleHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'text/html')
-        self.end_headers()
-        self.wfile.write(b"Hello, world! Your port is open and the server is responding.")
+
+# Define a request model
+class TextRequest(BaseModel):
+    text: str
+    max_new_tokens: int = 100
+
+
+@app.post("/inference/")
+async def process_request(request: TextRequest):
+    start_time = time.time()
+
+    response_text = f"Processed: {request.text}"
+    duration = time.time() - start_time
+
+    return {
+        "response": response_text,
+        "duration": duration
+    }
+
 
 if __name__ == "__main__":
-    server_address = (host, port)
-    httpd = HTTPServer(server_address, MyHandler)
-    print(f"Server running on {host}:{port}...")
-    httpd.serve_forever()
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
