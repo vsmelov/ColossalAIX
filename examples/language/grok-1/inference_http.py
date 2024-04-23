@@ -47,6 +47,8 @@ class TextRequest(BaseModel):
     max_new_tokens: int = 100
 
 
+STOP_SEQUENCE = "="*10
+
 @app.post("/inference/")
 def do_inference(request: TextRequest):
     logging.info(f"Received request: {request}")
@@ -63,6 +65,7 @@ def do_inference(request: TextRequest):
             temperature=args.temperature,
             top_k=args.top_k,
             top_p=args.top_p,
+            stop_sequence=STOP_SEQUENCE,
         )
         response = tokenizer.decode(output)
         duration = time.time() - start_time
@@ -76,7 +79,7 @@ def do_inference(request: TextRequest):
 
 def create_tasks(text: str, max_new_tokens: int):
     logging.info(f"Creating tasks for {text=}, {max_new_tokens=}")
-    for i in range(1, 8+1):
+    for i in range(1, 8):
         create_task(i, text, max_new_tokens)
 
 
@@ -121,10 +124,12 @@ if __name__ == "__main__":
     else:
         fname = f'worker-{dist.get_rank()}.task.json'
         while True:
+            # this is the worst synchronization method ever
+
             # if file exist
             import os
             if not os.path.exists(fname):
-                time.sleep(1)
+                time.sleep(0.3)
                 continue
             with open(f'worker-{dist.get_rank()}.task.json', 'r') as f:
                 import json
@@ -139,6 +144,7 @@ if __name__ == "__main__":
                     temperature=args.temperature,
                     top_k=args.top_k,
                     top_p=args.top_p,
+                    stop_sequence=STOP_SEQUENCE,
                 )
             # remove the task file
             os.remove(f'worker-{dist.get_rank()}.task.json')
