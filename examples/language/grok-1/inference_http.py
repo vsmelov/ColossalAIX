@@ -52,6 +52,8 @@ def do_inference(request: TextRequest):
     logging.info(f"Received request: {request}")
     start_time = time.time()
     try:
+        create_tasks(request.text, request.max_new_tokens)
+
         output = inference(
             model.unwrap(),
             tokenizer,
@@ -70,6 +72,18 @@ def do_inference(request: TextRequest):
     except Exception as e:
         logging.exception(f'Error occurred: {e}')
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def create_tasks(text: str, max_new_tokens: int):
+    logging.info(f"Creating tasks for {text=}, {max_new_tokens=}")
+    for i in range(1, 8+1):
+        create_task(i, text, max_new_tokens)
+
+
+def create_task(worker, text: str, max_new_tokens: int):
+    import json
+    with open(f'worker-{worker}.task.json', 'w') as f:
+        json.dump({'text': text, 'max_new_tokens': max_new_tokens}, f)
 
 
 if __name__ == "__main__":
@@ -104,3 +118,27 @@ if __name__ == "__main__":
     if dist.get_rank() == 0:
         import uvicorn
         uvicorn.run(app, host="0.0.0.0", port=8000)
+    else:
+        fname = f'worker-{dist.get_rank()}.task.json'
+        while True:
+            # if file exist
+            import os
+            if not os.path.exists(fname):
+                time.sleep(1)
+                continue
+            with open(f'worker-{dist.get_rank()}.task.json', 'r') as f:
+                import json
+                task = json.load(f)
+                logging.info(f"Worker {dist.get_rank()} received task: {task}")
+                output = inference(
+                    model.unwrap(),
+                    tokenizer,
+                    task['text'],
+                    max_new_tokens=task['max_new_tokens'],
+                    do_sample=args.do_sample,
+                    temperature=args.temperature,
+                    top_k=args.top_k,
+                    top_p=args.top_p,
+                )
+            # remove the task file
+            os.remove(f'worker-{dist.get_rank()}.task.json')
