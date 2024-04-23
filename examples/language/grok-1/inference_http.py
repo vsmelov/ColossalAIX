@@ -18,7 +18,7 @@ import logging
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s:%(lineno)d - %(levelname)s - %(message)s")
 
-dist.init_process_group("nccl")
+# dist.init_process_group("nccl")
 
 logging.info(f'Rank: {dist.get_rank()}')
 
