@@ -33,6 +33,7 @@ class TextRequest(BaseModel):
 @app.post("/inference/")
 def do_inference(request: TextRequest):
     logging.info(f"Received request: {request}")
+    start_time = time.time()
     try:
         output = inference(
             model.unwrap(),
@@ -41,6 +42,7 @@ def do_inference(request: TextRequest):
             max_new_tokens=request.max_new_tokens
         )
         response = tokenizer.decode(output)
+        logging.info(f'Inference took {time.time() - start_time:.2f} seconds')
         logging.info(f"Response: {response}")
         return {"response": response}
     except Exception as e:
@@ -52,7 +54,7 @@ parser = get_default_parser()
 args = parser.parse_args()
 
 
-logging.info(f"Starting FastAPI server on rank, {args=}")
+logging.info(f"Starting, {args=}")
 start = time.time()
 
 colossalai.launch_from_torch({})
