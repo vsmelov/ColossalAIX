@@ -107,6 +107,16 @@ def create_tasks(text: str, max_new_tokens: int):
         create_task(i, text, max_new_tokens)
 
 
+def remove_tasks():
+    for i in range(1, 8):
+        import os
+        if os.path.exists(f'worker-{i}.task.json'):
+            os.remove(f'worker-{i}.task.json')
+
+
+remove_tasks()
+
+
 def create_task(worker, text: str, max_new_tokens: int):
     import json
     with open(f'worker-{worker}.task.json', 'w') as f:
