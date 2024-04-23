@@ -38,6 +38,11 @@ if __name__ == "__main__":
     model.eval()
     init_time = time.time() - start
 
+    print(f'====')
+    print(f'Rank: {coordinator.rank}')
+    print(f'Initialized model and tokenizer in {init_time:.2f} seconds.')
+    print(f'====')
+
     for text in args.text:
         output = inference(
             model.unwrap(),
