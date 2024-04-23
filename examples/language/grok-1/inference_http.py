@@ -42,12 +42,36 @@ args = parser.parse_args()
 app = FastAPI()
 
 
+from transformers import StoppingCriteria
+
+STOP_SEQUENCE = "="*10
+
+class MyStoppingCriteria(StoppingCriteria):
+    def __init__(self, target_sequence, prompt):
+        self.target_sequence = target_sequence
+        self.prompt = prompt
+
+    def __call__(self, input_ids, scores, **kwargs):
+        # Get the generated text as a string
+        generated_text = tokenizer.decode(input_ids[0])
+        generated_text = generated_text.replace(self.prompt,'')
+        # Check if the target sequence appears in the generated text
+        if self.target_sequence in generated_text:
+            return True  # Stop generation
+
+        return False  # Continue generation
+
+    def __len__(self):
+        return 1
+
+    def __iter__(self):
+        yield self
+
+
 class TextRequest(BaseModel):
     text: str
     max_new_tokens: int = 100
 
-
-STOP_SEQUENCE = "="*10
 
 @app.post("/inference/")
 def do_inference(request: TextRequest):
@@ -65,7 +89,7 @@ def do_inference(request: TextRequest):
             temperature=args.temperature,
             top_k=args.top_k,
             top_p=args.top_p,
-            stop_sequence=STOP_SEQUENCE,
+            stopping_criteria=MyStoppingCriteria(STOP_SEQUENCE, request.text)
         )
         response = tokenizer.decode(output)
         duration = time.time() - start_time
@@ -144,7 +168,7 @@ if __name__ == "__main__":
                     temperature=args.temperature,
                     top_k=args.top_k,
                     top_p=args.top_p,
-                    stop_sequence=STOP_SEQUENCE,
+                    stopping_criteria=MyStoppingCriteria(STOP_SEQUENCE, task['text']),
                 )
             # remove the task file
             os.remove(f'worker-{dist.get_rank()}.task.json')
