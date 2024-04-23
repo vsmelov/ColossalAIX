@@ -14,6 +14,11 @@ from colossalai.cluster import DistCoordinator
 from colossalai.lazy import LazyInitContext
 from colossalai.utils import get_current_device
 import torch.distributed as dist
+import logging
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s:%(lineno)d - %(levelname)s - %(message)s")
+
+logging.info(f'Rank: {dist.get_rank()}')
 
 app = FastAPI()
 
@@ -25,6 +30,7 @@ class TextRequest(BaseModel):
 
 @app.post("/inference/")
 def do_inference(request: TextRequest):
+    logging.info(f"Received request: {request}")
     try:
         output = inference(
             model.unwrap(),
@@ -32,8 +38,11 @@ def do_inference(request: TextRequest):
             request.text,
             max_new_tokens=request.max_new_tokens
         )
-        return {"response": tokenizer.decode(output)}
+        response = tokenizer.decode(output)
+        logging.info(f"Response: {response}")
+        return {"response": response}
     except Exception as e:
+        logging.exception(f'Error occurred: {e}')
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -43,6 +52,9 @@ if __name__ == "__main__":
 
     parser = get_default_parser()
     args = parser.parse_args()
+
+    logging.info(f"Starting FastAPI server on rank {dist.get_rank()}, {args=}")
+    start = time.time()
 
     colossalai.launch_from_torch({})
     coordinator = DistCoordinator()
@@ -64,6 +76,9 @@ if __name__ == "__main__":
         )
     model, *_ = booster.boost(model)
     model.eval()
+    init_time = time.time() - start
+
+    logging.info(f"Model initialized in {init_time:.2f} seconds")
 
     # Start FastAPI only on the master node
     if dist.get_rank() == 0:
