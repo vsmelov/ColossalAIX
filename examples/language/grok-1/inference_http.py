@@ -20,7 +20,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s:%(lineno)
 
 # dist.init_process_group("nccl")
 
-logging.info(f'Rank: {dist.get_rank()}')
+logging.info(f'Hello World!')
 
 app = FastAPI()
 
@@ -52,7 +52,7 @@ parser = get_default_parser()
 args = parser.parse_args()
 
 
-logging.info(f"Starting FastAPI server on rank {dist.get_rank()}, {args=}")
+logging.info(f"Starting FastAPI server on rank, {args=}")
 start = time.time()
 
 colossalai.launch_from_torch({})
@@ -77,7 +77,7 @@ model, *_ = booster.boost(model)
 model.eval()
 init_time = time.time() - start
 
-logging.info(f"Model initialized in {init_time:.2f} seconds")
+logging.info(f"Model initialized in {init_time:.2f} seconds, rank={dist.get_rank()}")
 
 
 if __name__ == "__main__":
