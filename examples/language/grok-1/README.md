@@ -1,3 +1,18 @@
+# Run everything
+
+```
+git clone https://github.com/vsmelov/ColossalAIX.git
+cd ColossalAIX
+pip install .
+cd examples/language/grok-1
+pip install -r requirements.txt
+pip install -r xrequirements.txt
+sudo apt update
+sudo apt install git-lfs
+git lfs install
+git clone https://huggingface.co/hpcai-tech/grok-1
+```
+
 # Grok-1 Inference
 
  - 314 Billion Parameter Grok-1 Inference Accelerated by 3.8x, an easy-to-use Python + PyTorch + HuggingFace version for Inference.
