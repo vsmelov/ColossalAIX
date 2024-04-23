@@ -1,6 +1,6 @@
 """
 Run with:
-    python simple_http_server.py
+    python http_server_stub.py
 """
 
 from http.server import SimpleHTTPRequestHandler, HTTPServer

@@ -18,6 +18,8 @@ import logging
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s:%(lineno)d - %(levelname)s - %(message)s")
 
+dist.init_process_group("nccl")
+
 logging.info(f'Rank: {dist.get_rank()}')
 
 app = FastAPI()
@@ -47,9 +49,6 @@ def do_inference(request: TextRequest):
 
 
 if __name__ == "__main__":
-    # Initialize the distributed environment
-    dist.init_process_group("nccl")
-
     parser = get_default_parser()
     args = parser.parse_args()
 
