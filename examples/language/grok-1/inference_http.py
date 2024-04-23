@@ -48,37 +48,39 @@ def do_inference(request: TextRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-if __name__ == "__main__":
-    parser = get_default_parser()
-    args = parser.parse_args()
+parser = get_default_parser()
+args = parser.parse_args()
 
-    logging.info(f"Starting FastAPI server on rank {dist.get_rank()}, {args=}")
-    start = time.time()
 
-    colossalai.launch_from_torch({})
-    coordinator = DistCoordinator()
-    plugin = HybridParallelPlugin(
-        tp_size=coordinator.world_size,
-        pp_size=1,
-        precision="bf16",
-        parallel_output=False,
-        custom_policy=Grok1ForCausalLMPolicy(),
+logging.info(f"Starting FastAPI server on rank {dist.get_rank()}, {args=}")
+start = time.time()
+
+colossalai.launch_from_torch({})
+coordinator = DistCoordinator()
+plugin = HybridParallelPlugin(
+    tp_size=coordinator.world_size,
+    pp_size=1,
+    precision="bf16",
+    parallel_output=False,
+    custom_policy=Grok1ForCausalLMPolicy(),
+)
+booster = Booster(plugin=plugin)
+torch.set_default_dtype(torch.bfloat16)
+
+tokenizer = AutoTokenizer.from_pretrained(args.pretrained, trust_remote_code=True)
+
+with LazyInitContext(default_device=get_current_device()):
+    model = AutoModelForCausalLM.from_pretrained(
+        args.pretrained, trust_remote_code=True, torch_dtype=torch.bfloat16
     )
-    booster = Booster(plugin=plugin)
-    torch.set_default_dtype(torch.bfloat16)
+model, *_ = booster.boost(model)
+model.eval()
+init_time = time.time() - start
 
-    tokenizer = AutoTokenizer.from_pretrained(args.pretrained, trust_remote_code=True)
+logging.info(f"Model initialized in {init_time:.2f} seconds")
 
-    with LazyInitContext(default_device=get_current_device()):
-        model = AutoModelForCausalLM.from_pretrained(
-            args.pretrained, trust_remote_code=True, torch_dtype=torch.bfloat16
-        )
-    model, *_ = booster.boost(model)
-    model.eval()
-    init_time = time.time() - start
 
-    logging.info(f"Model initialized in {init_time:.2f} seconds")
-
+if __name__ == "__main__":
     # Start FastAPI only on the master node
     if dist.get_rank() == 0:
         import uvicorn
