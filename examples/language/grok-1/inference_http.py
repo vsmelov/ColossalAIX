@@ -107,12 +107,17 @@ def create_tasks(text: str, max_new_tokens: int):
         create_task(i, text, max_new_tokens)
 
 
+def task_f(worker):
+    return f'worker-{worker}.task.json'
+
+
 def remove_tasks():
     for i in range(1, 8):
         import os
-        if os.path.exists(f'worker-{i}.task.json'):
-            logging.info(f"Removing task file: worker-{i}.task.json")
-            os.remove(f'worker-{i}.task.json')
+        f = task_f(i)
+        if os.path.exists(f):
+            logging.info(f"Removing task file: {f}")
+            os.remove(f)
 
 
 remove_tasks()
@@ -120,7 +125,7 @@ remove_tasks()
 
 def create_task(worker, text: str, max_new_tokens: int):
     import json
-    with open(f'worker-{worker}.task.json', 'w') as f:
+    with open(task_f(worker), 'w') as f:
         json.dump({'text': text, 'max_new_tokens': max_new_tokens}, f)
 
 
@@ -129,7 +134,11 @@ if __name__ == "__main__":
     start = time.time()
 
     colossalai.launch_from_torch({})
+    logging.info(f"colossalai.launch_from_torch()")
+
     coordinator = DistCoordinator()
+    logging.info(f"DistCoordinator()")
+
     plugin = HybridParallelPlugin(
         tp_size=coordinator.world_size,
         pp_size=1,
@@ -137,17 +146,25 @@ if __name__ == "__main__":
         parallel_output=False,
         custom_policy=Grok1ForCausalLMPolicy(),
     )
+    logging.info(f"HybridParallelPlugin()")
+
     booster = Booster(plugin=plugin)
+    logging.info(f"Booster()")
+
     torch.set_default_dtype(torch.bfloat16)
 
     tokenizer = AutoTokenizer.from_pretrained(args.pretrained, trust_remote_code=True)
+    logging.info(f"AutoTokenizer()")
 
     with LazyInitContext(default_device=get_current_device()):
         model = AutoModelForCausalLM.from_pretrained(
             args.pretrained, trust_remote_code=True, torch_dtype=torch.bfloat16
         )
+        logging.info(f"AutoModelForCausalLM()")
     model, *_ = booster.boost(model)
+    logging.info(f"Booster.boost()")
     model.eval()
+    logging.info(f"model.eval()")
     init_time = time.time() - start
 
     logging.info(f"Model initialized in {init_time:.2f} seconds, rank={dist.get_rank()}")
