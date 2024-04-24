@@ -71,6 +71,10 @@ class MyStoppingCriteria(StoppingCriteria):
 class TextRequest(BaseModel):
     text: str
     max_new_tokens: int = 100
+    # do_sample: bool = True
+    # temperature: float = 0.3
+    # top_k: int = 50
+    # top_p: float = 0.95
 
 
 @app.post("/inference/")
