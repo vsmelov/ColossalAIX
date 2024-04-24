@@ -111,6 +111,7 @@ def remove_tasks():
     for i in range(1, 8):
         import os
         if os.path.exists(f'worker-{i}.task.json'):
+            logging.info(f"Removing task file: worker-{i}.task.json")
             os.remove(f'worker-{i}.task.json')
 
 
