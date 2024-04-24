@@ -71,10 +71,10 @@ class MyStoppingCriteria(StoppingCriteria):
 class TextRequest(BaseModel):
     text: str
     max_new_tokens: int = 100
-    # do_sample: bool = True
-    # temperature: float = 0.3
-    # top_k: int = 50
-    # top_p: float = 0.95
+    do_sample: bool = True
+    temperature: float = 0.3
+    top_k: int = 20  # 50
+    top_p: float = 0.5  # 0.95
 
 
 @app.post("/inference/")
@@ -82,17 +82,17 @@ def do_inference(request: TextRequest):
     logging.info(f"Received request: {request}")
     start_time = time.time()
     try:
-        create_tasks(request.text, request.max_new_tokens)
+        create_tasks(request)
 
         output = inference(
             model.unwrap(),
             tokenizer,
             request.text,
             max_new_tokens=request.max_new_tokens,
-            do_sample=args.do_sample,
-            temperature=args.temperature,
-            top_k=args.top_k,
-            top_p=args.top_p,
+            do_sample=request.do_sample,
+            temperature=request.temperature,
+            top_k=request.top_k,
+            top_p=request.top_p,
             stopping_criteria=MyStoppingCriteria(STOP_SEQUENCE, request.text)
         )
         response = tokenizer.decode(output)
@@ -105,10 +105,10 @@ def do_inference(request: TextRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-def create_tasks(text: str, max_new_tokens: int):
-    logging.info(f"Creating tasks for {text=}, {max_new_tokens=}")
+def create_tasks(request: TextRequest):
+    logging.info(f"Creating tasks for {request}")
     for i in range(1, 8):
-        create_task(i, text, max_new_tokens)
+        create_task(i, request)
 
 
 def task_f(worker):
@@ -127,10 +127,10 @@ def remove_tasks():
 remove_tasks()
 
 
-def create_task(worker, text: str, max_new_tokens: int):
+def create_task(worker, request: TextRequest):
     import json
     with open(task_f(worker), 'w') as f:
-        json.dump({'text': text, 'max_new_tokens': max_new_tokens}, f)
+        json.dump(request.dict(), f)
 
 
 if __name__ == "__main__":
@@ -196,10 +196,10 @@ if __name__ == "__main__":
                     tokenizer,
                     task['text'],
                     max_new_tokens=task['max_new_tokens'],
-                    do_sample=args.do_sample,
-                    temperature=args.temperature,
-                    top_k=args.top_k,
-                    top_p=args.top_p,
+                    do_sample=task['do_sample'],
+                    temperature=task['temperature'],
+                    top_k=task['top_k'],
+                    top_p=task['top_p'],
                     stopping_criteria=MyStoppingCriteria(STOP_SEQUENCE, task['text']),
                 )
             # remove the task file
