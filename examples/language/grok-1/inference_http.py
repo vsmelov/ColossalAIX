@@ -77,32 +77,37 @@ class TextRequest(BaseModel):
     top_p: float = 0.5  # 0.95
 
 
+import threading
+model_lock = threading.Lock()
+
+
 @app.post("/inference/")
 def do_inference(request: TextRequest):
     logging.info(f"Received request: {request}")
-    start_time = time.time()
-    try:
-        create_tasks(request)
+    with model_lock:
+        start_time = time.time()
+        try:
+            create_tasks(request)
 
-        output = inference(
-            model.unwrap(),
-            tokenizer,
-            request.text,
-            max_new_tokens=request.max_new_tokens,
-            do_sample=request.do_sample,
-            temperature=request.temperature,
-            top_k=request.top_k,
-            top_p=request.top_p,
-            stopping_criteria=MyStoppingCriteria(STOP_SEQUENCE, request.text)
-        )
-        response = tokenizer.decode(output)
-        duration = time.time() - start_time
-        logging.info(f'Inference took {duration:.2f} seconds')
-        logging.info(f"Response: {response}")
-        return {"response": response, 'duration': duration}
-    except Exception as e:
-        logging.exception(f'Error occurred: {e}')
-        raise HTTPException(status_code=500, detail=str(e))
+            output = inference(
+                model.unwrap(),
+                tokenizer,
+                request.text,
+                max_new_tokens=request.max_new_tokens,
+                do_sample=request.do_sample,
+                temperature=request.temperature,
+                top_k=request.top_k,
+                top_p=request.top_p,
+                stopping_criteria=MyStoppingCriteria(STOP_SEQUENCE, request.text)
+            )
+            response = tokenizer.decode(output)
+            duration = time.time() - start_time
+            logging.info(f'Inference took {duration:.2f} seconds')
+            logging.info(f"Response: {response}")
+            return {"response": response, 'duration': duration}
+        except Exception as e:
+            logging.exception(f'Error occurred: {e}')
+            raise HTTPException(status_code=500, detail=str(e))
 
 
 def create_tasks(request: TextRequest):
