@@ -39,7 +39,7 @@ def get_default_parser():
     parser.add_argument("--tokenizer", type=str, default="tokenizer.model")
     parser.add_argument("--text", type=str, nargs="+", default=["Hi, what's your name?"])
     parser.add_argument("--max_new_tokens", type=int, default=30)
-    parser.add_argument("--do_sample", action="store_true", default=False)
+    parser.add_argument("--do_sample", action="store_true", default=True)
     parser.add_argument("--temperature", type=float, default=0.3, help="Set temperature value")
     parser.add_argument("--top_k", type=int, default=50, help="Set top_k value for top-k-filtering")
     parser.add_argument("--top_p", type=float, default=0.95, help="Set top_p value for generation")
